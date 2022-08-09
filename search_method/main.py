@@ -1,42 +1,47 @@
 import torch
-
 from import_data import import_data
-from unixcoder import UniXcoder
+from mask_data_token import mask_data_token
+from mask_data_line import mask_data_line
+from delete_last_line import delete_last_line
+from delete_last_token import delete_last_token
+from code_generation_codebert import code_generation_codebert
+from code_completion_codegpt import code_completion_codegpt
+from code_generation_unixcoder import code_generation_unixcoder
+from code_completion_codegen import code_completion_codegen
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-# unixcoder config
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = UniXcoder("microsoft/unixcoder-base")
-model.to(device)
+# configuration
+top_k = 1  # number of outputs
+data_method = "mask-token"
+do = dict(codebert=0, codegpt=0, unixcoder=1, codegen=0)
 
-# user configuration and input
-data_path = "dataset/"
-embedding_filename = "embeddings/embeddings"
-data_filename = "embeddings/data"
-query = "This framework generates nothing for each input sentence"
-# data = import_data(data_path)
-number_of_data = 11967
-num_of_suggestsion = 10
+# prepare data
+print('preparing data...')
+data = import_data('dataset/')
+if data_method == "mask-token":
+    data_to_do = mask_data_token(data)
+elif data_method == "mask-line":
+    data_to_do = mask_data_line(data)
+elif data_method == "delete-last-line":
+    data_to_do = delete_last_line(data)
+elif data_method == "delete-last-token":
+    data_to_do = delete_last_token(data)
+print('data preparing done!')
 
-# Encode query
-tokens_ids = model.tokenize([query], max_length=512, mode="<encoder-only>")
-source_ids = torch.tensor(tokens_ids).to(device)
-tokens_embeddings, query_embedding = model(source_ids)
-norm_query_embedding = torch.nn.functional.normalize(query_embedding, p=2, dim=1)
+# code generation CodeBERT
+if do['codebert']:
+    print('completing code CodeBERT...')
+    code_generation_codebert(data_to_do, top_k)
 
-# Encode data and calculate similarities
-similarities = []
-data = []
-for i in range(number_of_data):
-    norm_data_embedding = torch.load(embedding_filename + str(i) + '.pt')
-    similarity = torch.einsum("ac,bc->ab", norm_query_embedding, norm_data_embedding).item()
-    similarities.append(similarity)
-    snippet = torch.load(data_filename + str(i) + '.pt')
-    data.append(snippet)
+# code completion CodeGPT
+if do['codegpt']:
+    print('completing code CodeGPT...')
+    code_completion_codegpt(data_to_do)
 
-# Output
-sort = sorted(range(len(similarities)), key=lambda k: similarities[k], reverse=True)
-for i in range(num_of_suggestsion):
-    print("rank:", i + 1)
-    print("suggestion:\n", data[sort[i]])
-    print("similarity", similarities[sort[i]])
-    print('------------------------------------------------------------------------------------------------')
+if do['unixcoder']:
+    print('completing code UnixCoder...')
+    code_generation_unixcoder(data_to_do)
+
+if do['codegen']:
+    print('completing code Codegen...')
+    code_completion_codegen(data_to_do)

@@ -1,3 +1,5 @@
+# input: dataset path
+# output: a list of code snippets
 import json
 import os
 
